@@ -1,0 +1,64 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Tree #create throw error if target already exists 1`] = `
+FileAlreadyExistException(
+  "Path \\"/some/path/to/file\\" already exist."
+  { path: '/some/path/to/file' }
+)
+`;
+
+exports[`Tree #create throw error if target is directory 1`] = `
+FileAlreadyExistException(
+  "Path \\"/some/path/to\\" already exist."
+  { path: '/some/path/to' }
+)
+`;
+
+exports[`Tree #delete throw error if target is directory 1`] = `
+PathIsDirectoryException(
+  "Path \\"/some/path/to\\" is a directory."
+  { path: '/some/path/to' }
+)
+`;
+
+exports[`Tree #get throw error if target is directory 1`] = `
+PathIsDirectoryException(
+  "Path \\"/some/path/to\\" is a directory."
+  { path: '/some/path/to' }
+)
+`;
+
+exports[`Tree #getDir throw error if target is file 1`] = `
+PathIsFileException(
+  "Path \\"/some/path/to/file\\" is a file."
+  { path: '/some/path/to/file' }
+)
+`;
+
+exports[`Tree #move throw error if source not exists 1`] = `
+FileDoesNotExistException(
+  "Path \\"/not/existed/path\\" does not exist."
+  { path: '/not/existed/path' }
+)
+`;
+
+exports[`Tree #move throw error if target is existed 1`] = `
+FileAlreadyExistException(
+  "Path \\"/some/path/to/file2\\" already exist."
+  { path: '/some/path/to/file2' }
+)
+`;
+
+exports[`Tree #overwrite throw error if target is directory 1`] = `
+PathIsDirectoryException(
+  "Path \\"/some/path/to\\" is a directory."
+  { path: '/some/path/to' }
+)
+`;
+
+exports[`Tree #overwrite throw error if target not exists 1`] = `
+FileDoesNotExistException(
+  "Path \\"/file/not/exists\\" does not exist."
+  { path: '/file/not/exists' }
+)
+`;
