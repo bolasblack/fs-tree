@@ -1,12 +1,13 @@
 {
   "name": "@c4605/fs-tree",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Inspired by angular-cli schematics, a staging area for fs changes",
   "main": "lib/index.js",
   "author": "c4605 <bolasblack@gmail.com>",
   "license": "MIT",
   "prettier": "@c4605/toolconfs/prettierrc",
   "scripts": {
+    "prepublish": "tsc",
     "test": "jest src"
   },
   "lint-staged": {

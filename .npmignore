@@ -1,0 +1,10 @@
+tslint.json
+tsconfig.json
+jest.config.js
+.travis.yml
+utils
+coverage
+.githooks
+__snapshots__
+*.spec.*
+*.tgz
