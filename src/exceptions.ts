@@ -21,3 +21,9 @@ export class PathIsFileException extends Error {
     super(`Path "${path}" is a file.`)
   }
 }
+
+export class MergeConflictException extends Error {
+  constructor(path: string) {
+    super(`A merge conflicted on path "${path}".`)
+  }
+}

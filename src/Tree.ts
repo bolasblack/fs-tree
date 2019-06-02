@@ -3,6 +3,7 @@ import {
   Tree as ITree,
   File as IFile,
   Directory as IDirectory,
+  StatsModifyOptions,
 } from './interfaces'
 import { File } from './File'
 import { Directory } from './Directory'
@@ -10,11 +11,94 @@ import {
   PathIsDirectoryException,
   PathIsFileException,
   FileDoesNotExistException,
-  FileAlreadyExistException,
+  MergeConflictException,
 } from './exceptions'
+import {
+  ActionCollector,
+  CreateAction,
+  OverwriteAction,
+  MoveAction,
+  DeleteAction,
+} from './Action'
+import { statsEquals } from './utils/statsEquals'
+
+enum MergeStrategy {
+  AllowOverwriteConflict = 1 << 1,
+  AllowCreationConflict = 1 << 2,
+  AllowDeleteConflict = 1 << 3,
+
+  // Uses the default strategy.
+  Default = 0,
+
+  // Error out if 2 files have the same path. It is useful to have a different value than
+  // Default in this case as the tooling Default might differ.
+  Error = 1 << 0,
+
+  // Only content conflicts are overwritten.
+  ContentOnly = AllowOverwriteConflict,
+
+  // Overwrite everything with the latest change.
+  Overwrite = AllowOverwriteConflict +
+    AllowCreationConflict +
+    AllowDeleteConflict,
+}
 
 export class Tree implements ITree {
-  constructor(private _host: IHost) {}
+  private _actionCollector: ActionCollector
+
+  private _getHost: () => Promise<IHost>
+
+  static MergeStrategy = MergeStrategy
+
+  constructor(private _createHost: () => IHost | Promise<IHost>) {
+    let host: IHost | null = null
+
+    this._getHost = async () => {
+      if (host) return host
+      return (host = await _createHost())
+    }
+
+    this._actionCollector = new ActionCollector({
+      readContent: this._hostRead,
+      readStat: this._hostReadStat,
+    })
+  }
+
+  async branch() {
+    const newTree = new Tree(this._createHost)
+    newTree._actionCollector = this._actionCollector.clone({
+      readContent: newTree._hostRead,
+      readStat: newTree._hostReadStat,
+    })
+    return newTree
+  }
+
+  async merge(other: ITree, strategy: MergeStrategy = MergeStrategy.Default) {
+    if (other === this) return
+
+    const actions = await other.exportActions()
+
+    for (let action of actions) {
+      switch (action.type) {
+        case 'overwrite':
+          await this._mergeOverwriteAction(action, strategy)
+          break
+        case 'create':
+          await this._mergeCreateAction(action, strategy)
+          break
+        case 'move':
+          await this._mergeMoveAction(action)
+          break
+        case 'delete':
+          await this._mergeDeleteAction(action, strategy)
+          break
+      }
+    }
+  }
+
+  exportActions() {
+    return this._actionCollector.toActions()
+  }
 
   async get(path: string): Promise<IFile | null> {
     if (await this._isDirectory(path)) {
@@ -34,68 +118,62 @@ export class Tree implements ITree {
     return this._getDir(path)
   }
 
-  async overwrite(path: string, content?: Buffer | string, stat?: IFile.Stats) {
+  async overwrite(
+    path: string,
+    content?: Buffer | string,
+    stat?: StatsModifyOptions,
+  ) {
     const originStat = await this._safeReadStat(path)
 
     if (!originStat) {
       throw new FileDoesNotExistException(path)
     }
 
-    if (originStat.isDirectory()) {
-      throw new PathIsDirectoryException(path)
-    }
-
     stat = this._createStat(originStat, stat || {})
 
-    await this._host.writeFile(
+    const host = await this._getHost()
+
+    await host.overwrite(
       path,
       content ? this._ensureBuffer(content) : undefined,
       stat,
     )
+
+    this._actionCollector.overwrite(path)
   }
 
-  async create(path: string, content: Buffer | string, stat?: IFile.Stats) {
-    if (await this._exists(path)) {
-      throw new FileAlreadyExistException(path)
-    }
+  async create(
+    path: string,
+    content: Buffer | string,
+    stat?: StatsModifyOptions,
+  ) {
+    const host = await this._getHost()
 
-    stat = this._createStat(stat || {})
+    await host.create(
+      path,
+      this._ensureBuffer(content),
+      this._createStat(stat || {}),
+    )
 
-    await this._host.writeFile(path, this._ensureBuffer(content), stat)
+    this._actionCollector.create(path)
   }
 
   async delete(path: string) {
-    const stat = await this._safeReadStat(path)
+    await (await this._getHost()).delete(path)
 
-    if (!stat) return
-
-    if (stat.isDirectory()) {
-      throw new PathIsDirectoryException(path)
-    }
-
-    await this._host.deleteFile(path)
+    this._actionCollector.delete(path)
   }
 
   async move(from: string, to: string) {
-    const [sourcePathStat, targetPathStat] = await Promise.all([
-      this._safeReadStat(from),
-      this._safeReadStat(to),
-    ])
+    await (await this._getHost()).move(from, to)
 
-    if (!sourcePathStat) {
-      throw new FileDoesNotExistException(from)
-    }
-
-    if (targetPathStat) {
-      throw new FileAlreadyExistException(to)
-    }
-
-    await this._host.mkdirp(to)
-    await this._host.moveFile(from, to)
+    this._actionCollector.move(from, to)
   }
 
-  private _createStat(...stats: Partial<IFile.Stats>[]) {
-    return <IFile.Stats>Object.assign({}, ...stats)
+  private _createStat(
+    ...stats: Partial<StatsModifyOptions>[]
+  ): StatsModifyOptions {
+    return Object.assign({}, ...stats)
   }
 
   private _ensureBuffer(content: Buffer | string) {
@@ -106,10 +184,18 @@ export class Tree implements ITree {
     return content
   }
 
+  private _hostRead = async (path: string) => {
+    return (await this._getHost()).read(path)
+  }
+
+  private _hostReadStat = async (path: string) => {
+    return (await this._getHost()).readStat(path)
+  }
+
   private _getFile(path: string) {
     return new File(path, {
-      content: () => Promise.resolve(this._host.readFile(path)),
-      stat: () => Promise.resolve(this._host.readStat(path)),
+      content: () => this._hostRead(path),
+      stat: () => this._hostReadStat(path),
     })
   }
 
@@ -122,7 +208,8 @@ export class Tree implements ITree {
 
   private _listChildren(path: string) {
     return async () => {
-      const dirInfo = await this._host.readDir(path)
+      const _host = await this._getHost()
+      const dirInfo = await _host.readDir(path)
 
       return {
         dirs: dirInfo.dirs.map(this._getDir.bind(this)),
@@ -149,10 +236,144 @@ export class Tree implements ITree {
 
   private async _safeReadStat(path: string) {
     try {
-      return await this._host.readStat(path)
+      return await this._hostReadStat(path)
     } catch (err) {
       if (err.code === 'ENOENT') return null
       throw err
     }
+  }
+
+  private async _mergeDeleteAction(
+    action: DeleteAction,
+    strategy: MergeStrategy,
+  ) {
+    const deleteConflictAllowed =
+      (strategy & MergeStrategy.AllowOverwriteConflict) ==
+      MergeStrategy.AllowDeleteConflict
+
+    const { path } = action
+
+    if (this._willDelete(path)) {
+      // TODO: This should technically check the content (e.g., hash on delete)
+      // Identical outcome; no action required
+      return
+    }
+
+    if (!this._exists(path) && !deleteConflictAllowed) {
+      throw new MergeConflictException(path)
+    }
+
+    await this.delete(path)
+  }
+
+  private async _mergeMoveAction(action: MoveAction) {
+    const { path, to } = action
+
+    if (this._willDelete(path)) {
+      throw new MergeConflictException(path)
+    }
+
+    if (this._willRename(path)) {
+      if (this._actionCollector.willRenameTo(path, to)) {
+        // Identical outcome; no action required
+        return
+      }
+
+      // No override possible for renaming.
+      throw new MergeConflictException(path)
+    }
+
+    await this.move(path, to)
+  }
+
+  private async _mergeOverwriteAction(
+    action: OverwriteAction,
+    strategy: MergeStrategy,
+  ) {
+    const overwriteConflictAllowed =
+      (strategy & MergeStrategy.AllowOverwriteConflict) ==
+      MergeStrategy.AllowOverwriteConflict
+
+    const { path, content, stat } = action
+
+    if (this._willDelete(path) && !overwriteConflictAllowed) {
+      throw new MergeConflictException(path)
+    }
+
+    // Ignore if content is the same (considered the same change).
+    if (this._willOverwrite(path)) {
+      const [existingContent, existingStat] = await Promise.all([
+        this._hostRead(path),
+        this._hostReadStat(path),
+      ])
+
+      if (
+        // prettier-ignore
+        (!content || (existingContent && content.equals(existingContent))) &&
+        (!stat || (existingStat && statsEquals(existingStat, stat)))
+      ) {
+        // Identical outcome; no action required
+        return
+      }
+
+      if (!overwriteConflictAllowed) {
+        throw new MergeConflictException(path)
+      }
+    }
+
+    // We use write here as merge validation has already been done, and we want to let
+    // the CordHost do its job.
+    await this.overwrite(path, content, stat)
+  }
+
+  private async _mergeCreateAction(
+    action: CreateAction,
+    strategy: MergeStrategy,
+  ) {
+    const creationConflictAllowed =
+      (strategy & MergeStrategy.AllowCreationConflict) ==
+      MergeStrategy.AllowCreationConflict
+
+    const { path, content, stat } = action
+
+    if (this._willCreate(path) || this._willOverwrite(path)) {
+      const [existingContent, existingStat] = await Promise.all([
+        this._hostRead(path),
+        this._hostReadStat(path),
+      ])
+
+      if (
+        // prettier-ignore
+        (existingContent && content.equals(existingContent)) &&
+        (!stat || (existingStat && statsEquals(existingStat, stat)))
+      ) {
+        // Identical outcome; no action required
+        return
+      }
+
+      if (!creationConflictAllowed) {
+        throw new MergeConflictException(path)
+      }
+
+      await this.overwrite(path, content, stat)
+    } else {
+      await this.create(path, content, stat)
+    }
+  }
+
+  protected _willCreate(path: string) {
+    return this._actionCollector.willCreate(path)
+  }
+
+  protected _willOverwrite(path: string) {
+    return this._actionCollector.willOverwrite(path)
+  }
+
+  protected _willDelete(path: string) {
+    return this._actionCollector.willDelete(path)
+  }
+
+  protected _willRename(path: string) {
+    return this._actionCollector.willRename(path)
   }
 }

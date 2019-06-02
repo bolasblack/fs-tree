@@ -1,6 +1,12 @@
+import { Action } from './Action'
+
 export type FileVisitor = (
   file: File,
 ) => boolean | void | Promise<boolean | void>
+
+export interface StatsModifyOptions {
+  mode?: number
+}
 
 export interface File {
   readonly path: string
@@ -11,6 +17,10 @@ export interface File {
 export namespace File {
   export interface Stats {
     mode: number
+
+    isFile(): boolean
+
+    isDirectory(): boolean
   }
 }
 
@@ -25,79 +35,56 @@ export interface Directory {
 }
 
 export interface Tree {
+  branch(): Promise<Tree>
+  merge(other: Tree): Promise<void>
+  exportActions(): Promise<Action[]>
+
   // Read
   get(path: string): Promise<File | null>
   getDir(path: string): Promise<Directory>
 
   // Change file
-  overwrite(path: string, content: Buffer | string, stat?: File.Stats): void
+  overwrite(
+    path: string,
+    content: Buffer | string,
+    stat?: StatsModifyOptions,
+  ): void
 
   // Structural changes
-  create(path: string, content: Buffer | string, stat?: File.Stats): void
+  create(
+    path: string,
+    content: Buffer | string,
+    stat?: StatsModifyOptions,
+  ): void
   delete(path: string): void
   move(from: string, to: string): void
 }
 
-export namespace Tree {
-  export type Action =
-    | OverwriteAction
-    | CreateAction
-    | DeleteAction
-    | MoveAction
-
-  export interface OverwriteAction {
-    type: 'overwrite'
-    path: string
-    content?: Buffer
-    stat?: File.Stats
-  }
-
-  export interface CreateAction {
-    type: 'create'
-    path: string
-    content: Buffer
-    stat?: File.Stats
-  }
-
-  export interface DeleteAction {
-    type: 'delete'
-    path: string
-  }
-
-  export interface MoveAction {
-    type: 'move'
-    from: string
-    to: string
-  }
-}
-
 export interface Host {
-  readFile(path: string): Buffer | Promise<Buffer>
+  read(path: string): Buffer | Promise<Buffer>
 
   readDir(path: string): Host.readDir.Resp | Promise<Host.readDir.Resp>
 
-  readStat(path: string): Host.Stats | Promise<Host.Stats>
+  readStat(path: string): File.Stats | Promise<File.Stats>
 
-  writeFile(
+  overwrite(
     path: string,
     content?: Buffer,
-    options?: Host.writeFile.Options,
+    options?: Host.overwrite.Options,
   ): void | Promise<void>
 
-  moveFile(from: string, to: string): void | Promise<void>
+  create(
+    path: string,
+    content: Buffer,
+    options?: Host.create.Options,
+  ): void | Promise<void>
 
-  deleteFile(path: string): void | Promise<void>
+  move(from: string, to: string): void | Promise<void>
 
-  mkdirp(path: string): void | Promise<void>
+  delete(path: string): void | Promise<void>
 }
 
 export namespace Host {
-  export interface Stats extends File.Stats {
-    isFile(): boolean
-
-    isDirectory(): boolean
-  }
-
   export namespace readDir {
     export interface Resp {
       files: string[]
@@ -105,9 +92,11 @@ export namespace Host {
     }
   }
 
-  export namespace writeFile {
-    export interface Options {
-      mode: number
-    }
+  export namespace overwrite {
+    export type Options = StatsModifyOptions
+  }
+
+  export namespace create {
+    export type Options = StatsModifyOptions
   }
 }

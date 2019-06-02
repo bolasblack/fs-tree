@@ -21,6 +21,13 @@ PathIsDirectoryException(
 )
 `;
 
+exports[`Tree #delete throw error if target not exists 1`] = `
+FileDoesNotExistException(
+  "Path \\"/not/existed/path\\" does not exist."
+  { path: '/not/existed/path' }
+)
+`;
+
 exports[`Tree #get throw error if target is directory 1`] = `
 PathIsDirectoryException(
   "Path \\"/some/path/to\\" is a directory."
