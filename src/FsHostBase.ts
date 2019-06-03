@@ -133,18 +133,14 @@ export class FsHostBase implements IHost {
   ) {
     await this._mkdirToParent(path)
 
-    const writePromise =
-      content != null
-        ? promisify(this._fs.writeFile.bind(this._fs))(path, content, options)
-        : undefined
+    if (content != null) {
+      await promisify(this._fs.writeFile.bind(this._fs))(path, content, options)
+    }
 
     // memfs.writeFile not support assign file mode
-    const chmodPromise =
-      options && options.mode != null
-        ? promisify(this._fs.chmod.bind(this._fs))(path, options.mode)
-        : undefined
-
-    await Promise.all([writePromise, chmodPromise])
+    if (options && options.mode != null) {
+      await promisify(this._fs.chmod.bind(this._fs))(path, options.mode)
+    }
   }
 
   private async _safeReadStat(path: string) {

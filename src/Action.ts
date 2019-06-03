@@ -68,26 +68,20 @@ export const moveAction = (from: string, to: string): MoveAction => ({
 export class ActionCollector {
   protected _filesToOverwrite = new Set<string>()
   protected _filesToCreate = new Set<string>()
-  protected _filesToRename = new Map<string, string>()
-  protected _filesToRenameRevert = new Map<string, string>()
+  protected _filesToMove = new Map<string, string>()
+  protected _filesToMoveRevert = new Map<string, string>()
   protected _filesToDelete = new Set<string>()
 
   constructor(private _options: ActionCollector.ConstructOptions) {}
 
-  willCreate(path: string) {
-    return this._filesToCreate.has(path)
-  }
-  willOverwrite(path: string) {
-    return this._filesToOverwrite.has(path)
-  }
-  willDelete(path: string) {
-    return this._filesToDelete.has(path)
-  }
-  willRename(path: string) {
-    return this._filesToRename.has(path)
-  }
-  willRenameTo(path: string, to: string) {
-    return this._filesToRename.get(path) === to
+  clone(constructOptions: ActionCollector.ConstructOptions) {
+    const collector = new ActionCollector(constructOptions)
+    collector._filesToOverwrite = new Set(this._filesToOverwrite)
+    collector._filesToCreate = new Set(this._filesToCreate)
+    collector._filesToMove = new Map(this._filesToMove)
+    collector._filesToMoveRevert = new Map(this._filesToMoveRevert)
+    collector._filesToDelete = new Set(this._filesToDelete)
+    return collector
   }
 
   overwrite(path: string) {
@@ -106,32 +100,49 @@ export class ActionCollector {
   }
 
   move(from: string, to: string) {
+    if (from === to) return
+
     // If we're renaming a file that's been created, shortcircuit to creating the `to` path.
     if (this._filesToCreate.has(from)) {
       this._filesToCreate.delete(from)
       this._filesToCreate.add(to)
+      return
     }
+
     if (this._filesToOverwrite.has(from)) {
       this._filesToOverwrite.delete(from)
+
+      // Recursively call this function. This is so we don't repeat the bottom logic. This
+      // if will be by-passed because we just deleted the `from` path from files to overwrite.
+      this.move(from, to)
+
       this._filesToOverwrite.add(to)
+      return
     }
+
     if (this._filesToDelete.has(to)) {
       this._filesToDelete.delete(to)
       this._filesToDelete.add(from)
       this._filesToOverwrite.add(to)
+      return
     }
 
-    const maybeTo1 = this._filesToRenameRevert.get(from)
-    if (maybeTo1) {
+    const previousMoveFrom = this._filesToMoveRevert.get(from)
+    if (previousMoveFrom) {
       // We already renamed to this file (A => from), let's rename the former to the new
       // path (A => to).
-      this._filesToRename.delete(maybeTo1)
-      this._filesToRenameRevert.delete(from)
-      from = maybeTo1
+      this._filesToMove.delete(previousMoveFrom)
+      this._filesToMoveRevert.delete(from)
+      from = previousMoveFrom
+
+      // We already renamed to this file (A<from1> => B<to1>), and now we are trying move
+      // back (B<from2> => A<to2>), let's simplize it: (A<from1> => A<to2>), so we need to
+      // do nothing
+      if (from === to) return
     }
 
-    this._filesToRename.set(from, to)
-    this._filesToRenameRevert.set(to, from)
+    this._filesToMove.set(from, to)
+    this._filesToMoveRevert.set(to, from)
   }
 
   delete(path: string) {
@@ -140,24 +151,14 @@ export class ActionCollector {
     } else if (this._filesToOverwrite.has(path)) {
       this._filesToOverwrite.delete(path)
       this._filesToDelete.add(path)
-    } else if (this._filesToRenameRevert.has(path)) {
-      const source = this._filesToRenameRevert.get(path)
-      this._filesToRenameRevert.delete(path)
-      this._filesToRename.delete(source!)
+    } else if (this._filesToMoveRevert.has(path)) {
+      const source = this._filesToMoveRevert.get(path)
+      this._filesToMoveRevert.delete(path)
+      this._filesToMove.delete(source!)
       this._filesToDelete.add(source!)
     } else {
       this._filesToDelete.add(path)
     }
-  }
-
-  clone(constructOptions: ActionCollector.ConstructOptions) {
-    const collector = new ActionCollector(constructOptions)
-    collector._filesToOverwrite = new Set(this._filesToOverwrite)
-    collector._filesToCreate = new Set(this._filesToCreate)
-    collector._filesToRename = new Map(this._filesToRename)
-    collector._filesToRenameRevert = new Map(this._filesToRenameRevert)
-    collector._filesToDelete = new Set(this._filesToDelete)
-    return collector
   }
 
   async toActions(): Promise<Action[]> {
@@ -165,7 +166,7 @@ export class ActionCollector {
       deleteAction,
     )
 
-    const moveActions: MoveAction[] = [...this._filesToRename.entries()].map(
+    const moveActions: MoveAction[] = [...this._filesToMove.entries()].map(
       ([from, to]) => moveAction(from, to),
     )
 
@@ -199,6 +200,22 @@ export class ActionCollector {
       ...(await createActions),
       ...(await overwriteActions),
     ]
+  }
+
+  willCreate(path: string) {
+    return this._filesToCreate.has(path)
+  }
+  willOverwrite(path: string) {
+    return this._filesToOverwrite.has(path)
+  }
+  willDelete(path: string) {
+    return this._filesToDelete.has(path)
+  }
+  willMove(path: string) {
+    return this._filesToMove.has(path)
+  }
+  willMoveTo(path: string, to: string) {
+    return this._filesToMove.get(path) === to
   }
 }
 

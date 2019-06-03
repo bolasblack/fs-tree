@@ -274,7 +274,7 @@ export class Tree implements ITree {
     }
 
     if (this._willRename(path)) {
-      if (this._actionCollector.willRenameTo(path, to)) {
+      if (this._actionCollector.willMoveTo(path, to)) {
         // Identical outcome; no action required
         return
       }
@@ -374,6 +374,6 @@ export class Tree implements ITree {
   }
 
   protected _willRename(path: string) {
-    return this._actionCollector.willRename(path)
+    return this._actionCollector.willMove(path)
   }
 }
