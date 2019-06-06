@@ -8,7 +8,7 @@
   "prettier": "@c4605/toolconfs/prettierrc",
   "scripts": {
     "prepublish": "tsc",
-    "test": "jest src"
+    "test": "node --async-stack-traces `yarn bin jest` src"
   },
   "lint-staged": {
     "*.{ts}": [

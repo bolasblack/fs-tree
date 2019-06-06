@@ -51,11 +51,11 @@ export class Tree implements ITree {
   static MergeStrategy = MergeStrategy
 
   constructor(private _createHost: () => IHost | Promise<IHost>) {
-    let host: IHost | null = null
+    let hostP: Promise<IHost> | null = null
 
-    this._getHost = async () => {
-      if (host) return host
-      return (host = await _createHost())
+    this._getHost = () => {
+      if (hostP) return hostP
+      return (hostP = Promise.resolve(_createHost()))
     }
 
     this._actionCollector = new ActionCollector({
@@ -135,7 +135,7 @@ export class Tree implements ITree {
 
     await host.overwrite(
       path,
-      content ? this._ensureBuffer(content) : undefined,
+      content != null ? this._ensureBuffer(content) : undefined,
       stat,
     )
 
@@ -254,12 +254,13 @@ export class Tree implements ITree {
     const { path } = action
 
     if (this._willDelete(path)) {
-      // TODO: This should technically check the content (e.g., hash on delete)
+      // TODO: (schematic) This should technically check the content (e.g., hash on delete)
+      //   But I have no idea how to implement it, so let's wait for schematic :P
       // Identical outcome; no action required
       return
     }
 
-    if (!this._exists(path) && !deleteConflictAllowed) {
+    if (!(await this._exists(path)) && !deleteConflictAllowed) {
       throw new MergeConflictException(path)
     }
 
@@ -273,8 +274,8 @@ export class Tree implements ITree {
       throw new MergeConflictException(path)
     }
 
-    if (this._willRename(path)) {
-      if (this._actionCollector.willMoveTo(path, to)) {
+    if (this._willMove(path)) {
+      if (this._willMoveTo(path, to)) {
         // Identical outcome; no action required
         return
       }
@@ -300,13 +301,13 @@ export class Tree implements ITree {
       throw new MergeConflictException(path)
     }
 
-    // Ignore if content is the same (considered the same change).
     if (this._willOverwrite(path)) {
       const [existingContent, existingStat] = await Promise.all([
         this._hostRead(path),
         this._hostReadStat(path),
       ])
 
+      // Ignore if content is the same (considered the same change).
       if (
         // prettier-ignore
         (!content || (existingContent && content.equals(existingContent))) &&
@@ -373,7 +374,11 @@ export class Tree implements ITree {
     return this._actionCollector.willDelete(path)
   }
 
-  protected _willRename(path: string) {
+  protected _willMove(path: string) {
     return this._actionCollector.willMove(path)
+  }
+
+  protected _willMoveTo(path: string, to: string) {
+    return this._actionCollector.willMoveTo(path, to)
   }
 }

@@ -11,6 +11,28 @@ const bufferEquality = (a, b) => {
   }
 }
 
+class ExpectCustomEqualityChecker {
+  constructor(checker) {
+    this.checker = checker
+  }
+}
+expect.customChecker = fn => {
+  if (typeof fn !== 'function') {
+    throw new TypeError('[expect.customChecker] argument must be a function')
+  }
+
+  return new ExpectCustomEqualityChecker(fn)
+}
+const customCheckerEquality = (a, b) => {
+  if (a instanceof ExpectCustomEqualityChecker) {
+    return a.checker(b)
+  }
+
+  if (b instanceof ExpectCustomEqualityChecker) {
+    return b.checker(a)
+  }
+}
+
 expect.extend({
   toEqual(received, expected, customEqualityCheckers = []) {
     const matcherName = 'toEqual'
@@ -22,6 +44,7 @@ expect.extend({
 
     const pass = this.equals(received, expected, [
       bufferEquality,
+      customCheckerEquality,
       jestExpectUtils.iterableEquality,
       ...customEqualityCheckers,
     ])
