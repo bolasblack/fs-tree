@@ -21,6 +21,7 @@ import {
   DeleteAction,
 } from './Action'
 import { statsEquals } from './utils/statsEquals'
+import { createSafeReadStat } from './utils/safeReadStat'
 
 enum MergeStrategy {
   AllowOverwriteConflict = 1 << 1,
@@ -44,11 +45,21 @@ enum MergeStrategy {
 }
 
 export class Tree implements ITree {
+  static MergeStrategy = MergeStrategy
+
   private _actionCollector: ActionCollector
 
   private _getHost: () => Promise<IHost>
 
-  static MergeStrategy = MergeStrategy
+  private _hostRead = async (path: string) => {
+    return (await this._getHost()).read(path)
+  }
+
+  private _hostReadStat = async (path: string) => {
+    return (await this._getHost()).readStat(path)
+  }
+
+  private _safeReadStat = createSafeReadStat(this._hostReadStat)
 
   constructor(private _createHost: () => IHost | Promise<IHost>) {
     let hostP: Promise<IHost> | null = null
@@ -184,14 +195,6 @@ export class Tree implements ITree {
     return content
   }
 
-  private _hostRead = async (path: string) => {
-    return (await this._getHost()).read(path)
-  }
-
-  private _hostReadStat = async (path: string) => {
-    return (await this._getHost()).readStat(path)
-  }
-
   private _getFile(path: string) {
     return new File(path, {
       content: () => this._hostRead(path),
@@ -232,15 +235,6 @@ export class Tree implements ITree {
 
   private async _exists(path: string) {
     return Boolean(await this._safeReadStat(path))
-  }
-
-  private async _safeReadStat(path: string) {
-    try {
-      return await this._hostReadStat(path)
-    } catch (err) {
-      if (err.code === 'ENOENT') return null
-      throw err
-    }
   }
 
   private async _mergeDeleteAction(

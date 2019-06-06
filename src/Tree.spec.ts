@@ -1,4 +1,3 @@
-import fs from 'fs'
 import path from 'path'
 import { Volume } from 'memfs'
 import { omit } from 'ramda'
@@ -115,7 +114,7 @@ describe('Tree', () => {
       ).rejects.toMatchSnapshot()
     })
 
-    it('overwrite file content in Host', async () => {
+    it('overwrite file content', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ [filePath]: 'content' })
       const ofs = await getOverlayFs(tree)
@@ -125,24 +124,19 @@ describe('Tree', () => {
       expect(ofs.readFileSync(filePath).toString()).toBe('content2')
     })
 
-    it('overwrite file stat in Host', async () => {
+    it('overwrite file stat', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ [filePath]: 'content' })
       const ofs = await getOverlayFs(tree)
 
       const fileModeBefore = ofs.statSync(filePath).mode
-      expect(fileModeBefore & fs.constants.S_IRWXU).toBeTruthy()
-      expect(fileModeBefore & fs.constants.S_IRGRP).toBeTruthy()
-      expect(fileModeBefore & fs.constants.S_IROTH).toBeTruthy()
+      expect(fileModeBefore & 0o777).toBe(0o666)
 
       await tree.overwrite(filePath, undefined, {
         mode: 0o733,
       })
       const fileModeAfter = ofs.statSync(filePath).mode
-      expect(fileModeAfter & fs.constants.S_IFREG).toBeTruthy()
-      expect(fileModeAfter & fs.constants.S_IRWXU).toBeTruthy()
-      expect(fileModeAfter & fs.constants.S_IRGRP).toBeFalsy()
-      expect(fileModeAfter & fs.constants.S_IROTH).toBeFalsy()
+      expect(fileModeAfter & 0o777).toBe(0o733)
     })
 
     it('overwrite file with empty content', async () => {
@@ -167,7 +161,7 @@ describe('Tree', () => {
       await expect(tree.create(dirPath, 'content')).rejects.toMatchSnapshot()
     })
 
-    it('create file in Host', async () => {
+    it('create file', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ '/some/path/other/file': 'content1' })
       const ofs = await getOverlayFs(tree)
@@ -177,7 +171,7 @@ describe('Tree', () => {
       expect(ofs.readFileSync(filePath + '1').toString()).toBe('content')
     })
 
-    it('create file with stat in Host', async () => {
+    it('create file with stat', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ '/some/path/other/file': 'content1' })
       const ofs = await getOverlayFs(tree)
@@ -185,10 +179,7 @@ describe('Tree', () => {
         mode: 0o733,
       })
       const fileMode = ofs.statSync(filePath).mode
-      expect(fileMode & fs.constants.S_IFREG).toBeTruthy()
-      expect(fileMode & fs.constants.S_IRWXU).toBeTruthy()
-      expect(fileMode & fs.constants.S_IRGRP).toBeFalsy()
-      expect(fileMode & fs.constants.S_IROTH).toBeFalsy()
+      expect(fileMode & 0o777).toBe(0o733)
     })
 
     it('create file with empty content', async () => {
@@ -212,7 +203,7 @@ describe('Tree', () => {
       await expect(tree.delete('/not/existed/path')).rejects.toMatchSnapshot()
     })
 
-    it('delete file in Host', async () => {
+    it('delete file', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ [filePath]: 'content' })
       const ofs = await getOverlayFs(tree)
@@ -240,7 +231,7 @@ describe('Tree', () => {
       ).rejects.toMatchSnapshot()
     })
 
-    it('move file from source to target in Host', async () => {
+    it('move file from source to target', async () => {
       const filePath = '/some/path/to/file'
       const tree = createTree({ [filePath]: 'content' })
       const ofs = await getOverlayFs(tree)
@@ -293,6 +284,13 @@ describe('Tree', () => {
           ) as any,
         }),
       ])
+    })
+
+    it('do nothing if merging self', async () => {
+      const tree = createTree({})
+      tree.exportActions = jest.fn(tree.exportActions)
+      await tree.merge(tree)
+      expect(tree.exportActions).not.toBeCalled()
     })
   })
 

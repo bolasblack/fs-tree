@@ -1,4 +1,4 @@
-import { Host as IHost, StatsModifyOptions } from './interfaces'
+import { Host as IHost, File as IFile, StatsModifyOptions } from './interfaces'
 import {
   mkdirp,
   FsImplementation as MkdirpFsImplementation,
@@ -12,6 +12,7 @@ import {
   FileDoesNotExistException,
   PathIsDirectoryException,
 } from './exceptions'
+import { createSafeReadStat } from './utils/safeReadStat'
 
 type NativeFS = typeof fs
 
@@ -26,6 +27,12 @@ export interface FSImpl extends MkdirpFsImplementation {
 }
 
 export class FsHostBase implements IHost {
+  readStat = (path: string): Promise<IFile.Stats> => {
+    return promisify(this._fs.stat.bind(this._fs))(path)
+  }
+
+  private _safeReadStat = createSafeReadStat(this.readStat)
+
   constructor(private _fs: FSImpl) {}
 
   read(path: string) {
@@ -50,10 +57,6 @@ export class FsHostBase implements IHost {
       files: string[]
       dirs: string[]
     }
-  }
-
-  readStat(path: string) {
-    return promisify(this._fs.stat.bind(this._fs))(path)
   }
 
   async overwrite(
@@ -92,6 +95,7 @@ export class FsHostBase implements IHost {
       throw new FileDoesNotExistException(from)
     }
 
+    // istanbul ignore next
     if (from === to) return
 
     if (targetPathStat) {
@@ -122,6 +126,7 @@ export class FsHostBase implements IHost {
     try {
       await mkdirp(parentPath, { fs: this._fs })
     } catch (err) {
+      // istanbul ignore next
       if (err.code !== 'EEXIST') throw err
     }
   }
@@ -140,15 +145,6 @@ export class FsHostBase implements IHost {
     // memfs.writeFile not support assign file mode
     if (options && options.mode != null) {
       await promisify(this._fs.chmod.bind(this._fs))(path, options.mode)
-    }
-  }
-
-  private async _safeReadStat(path: string) {
-    try {
-      return await this.readStat(path)
-    } catch (err) {
-      if (err.code === 'ENOENT') return null
-      throw err
     }
   }
 }

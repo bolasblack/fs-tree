@@ -44,7 +44,7 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.clone', () => {
+  describe('#clone', () => {
     it('clone ActionCollector', async () => {
       collector.overwrite(fakePath + 'a')
       collector.create(fakePath + 'b')
@@ -68,7 +68,7 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.overwrite', () => {
+  describe('#overwrite', () => {
     it('record overwrite log', async () => {
       collector.overwrite(fakePath)
       expect(collector.willOverwrite(fakePath)).toBe(true)
@@ -88,7 +88,7 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.create', () => {
+  describe('#create', () => {
     it('record create log', async () => {
       collector.create(fakePath)
       expect(collector.willCreate(fakePath)).toBe(true)
@@ -109,7 +109,7 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.move', () => {
+  describe('#move', () => {
     it('record move log', async () => {
       collector.move(fakePath, fakePath1)
       expect(collector.willMove(fakePath)).toBe(true)
@@ -199,7 +199,7 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.delete', () => {
+  describe('#delete', () => {
     it('record delete log', async () => {
       collector.delete(fakePath)
       expect(collector.willDelete(fakePath)).toBe(true)
@@ -239,27 +239,27 @@ describe('ActionCollector', () => {
     })
   })
 
-  describe('.toActions', () => {
+  describe('#toActions', () => {
     it('already tested', () => {})
   })
 
-  describe('.toCreate', () => {
+  describe('#toCreate', () => {
     it('already tested', () => {})
   })
 
-  describe('.toOverwrite', () => {
+  describe('#toOverwrite', () => {
     it('already tested', () => {})
   })
 
-  describe('.toDelete', () => {
+  describe('#toDelete', () => {
     it('already tested', () => {})
   })
 
-  describe('.toMove', () => {
+  describe('#toMove', () => {
     it('already tested', () => {})
   })
 
-  describe('.toMoveTo', () => {
+  describe('#toMoveTo', () => {
     it('already tested', () => {})
   })
 })
