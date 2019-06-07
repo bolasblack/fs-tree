@@ -1,5 +1,19 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`Tree #_mergeDeleteAction throw error if file not exists in host 1`] = `
+MergeConflictException(
+  "A merge conflicted on path \\"/deleting/path\\"."
+  {}
+)
+`;
+
+exports[`Tree #_mergeDeleteAction throw error if file not exists in host and strategy not allowed conflict 1`] = `
+MergeConflictException(
+  "A merge conflicted on path \\"/deleting/path\\"."
+  {}
+)
+`;
+
 exports[`Tree #create throw error if target already exists 1`] = `
 FileAlreadyExistException(
   "Path \\"/some/path/to/file\\" already exist."

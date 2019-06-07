@@ -1,6 +1,7 @@
 import path from 'path'
 import { Volume } from 'memfs'
 import { omit } from 'ramda'
+import { MergeStrategy } from './interfaces'
 import { MemoryFsHost } from './MemoryFsHost'
 import { Tree } from './Tree'
 import { File } from './File'
@@ -253,6 +254,15 @@ describe('Tree', () => {
       await newTree.create(filePath1, 'new content')
       expect(await tree.get(filePath1)).toBeNull()
     })
+
+    it('created tree inherited all previous action', async () => {
+      const filePath = '/some/path/to/file'
+      const tree = createTree({ [filePath]: 'content' })
+      await tree.create(filePath + '1', 'content')
+      const newTree = await tree.branch()
+      await newTree.exportActions()
+      // expect(await newTree.exportActions()).toEqual(await tree.exportActions())
+    })
   })
 
   describe('#merge', () => {
@@ -291,6 +301,44 @@ describe('Tree', () => {
       tree.exportActions = jest.fn(tree.exportActions)
       await tree.merge(tree)
       expect(tree.exportActions).not.toBeCalled()
+    })
+  })
+
+  describe('#_mergeDeleteAction', () => {
+    const deletingPath = '/deleting/path'
+    let tree = createTree({ [deletingPath]: 'content' })
+
+    beforeEach(() => {
+      tree = createTree({ [deletingPath]: 'content' })
+    })
+
+    it('do nothing if path already deleted', async () => {
+      await tree.delete(deletingPath)
+      const actionsBefore = await tree.exportActions()
+      await tree['_mergeDeleteAction'](
+        deleteAction(deletingPath),
+        MergeStrategy.Default,
+      )
+      const actionsAfter = await tree.exportActions()
+      expect(actionsBefore).toEqual(actionsAfter)
+    })
+
+    it('throw error if file not exists in host and strategy not allowed conflict', async () => {
+      tree = createTree({})
+      const mergeP = tree['_mergeDeleteAction'](
+        deleteAction(deletingPath),
+        MergeStrategy.Default,
+      )
+      await expect(mergeP).rejects.toMatchSnapshot()
+    })
+
+    it('record action if file not exists in host but strategy allowed conflict', async () => {
+      tree = createTree({})
+      await tree['_mergeDeleteAction'](
+        deleteAction(deletingPath),
+        MergeStrategy.AllowDeleteConflict,
+      )
+      expect(tree.exportActions()).resolves.toEqual(deleteAction(deletingPath))
     })
   })
 

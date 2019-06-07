@@ -4,6 +4,7 @@ import {
   File as IFile,
   Directory as IDirectory,
   StatsModifyOptions,
+  MergeStrategy,
 } from './interfaces'
 import { File } from './File'
 import { Directory } from './Directory'
@@ -23,30 +24,7 @@ import {
 import { statsEquals } from './utils/statsEquals'
 import { createSafeReadStat } from './utils/safeReadStat'
 
-enum MergeStrategy {
-  AllowOverwriteConflict = 1 << 1,
-  AllowCreationConflict = 1 << 2,
-  AllowDeleteConflict = 1 << 3,
-
-  // Uses the default strategy.
-  Default = 0,
-
-  // Error out if 2 files have the same path. It is useful to have a different value than
-  // Default in this case as the tooling Default might differ.
-  Error = 1 << 0,
-
-  // Only content conflicts are overwritten.
-  ContentOnly = AllowOverwriteConflict,
-
-  // Overwrite everything with the latest change.
-  Overwrite = AllowOverwriteConflict +
-    AllowCreationConflict +
-    AllowDeleteConflict,
-}
-
 export class Tree implements ITree {
-  static MergeStrategy = MergeStrategy
-
   private _actionCollector: ActionCollector
 
   private _getHost: () => Promise<IHost>
@@ -242,14 +220,15 @@ export class Tree implements ITree {
     strategy: MergeStrategy,
   ) {
     const deleteConflictAllowed =
-      (strategy & MergeStrategy.AllowOverwriteConflict) ==
+      (strategy & MergeStrategy.AllowDeleteConflict) ==
       MergeStrategy.AllowDeleteConflict
 
     const { path } = action
 
     if (this._willDelete(path)) {
       // TODO: (schematic) This should technically check the content (e.g., hash on delete)
-      //   But I have no idea how to implement it, so let's wait for schematic :P
+      //   But I have no idea how to implement it simply and elegantly, so let's wait for
+      //   schematic :P
       // Identical outcome; no action required
       return
     }

@@ -34,9 +34,29 @@ export interface Directory {
   visit(visitor: FileVisitor): Promise<void>
 }
 
+// prettier-ignore
+export enum MergeStrategy {
+  // Uses the default strategy.
+  Default                = 0b0000,
+  // Error out if 2 files have the same path. It is useful to have a different value than
+  // Default in this case as the tooling Default might differ.
+  Error                  = 0b0001,
+  AllowOverwriteConflict = 0b0010,
+  AllowCreationConflict  = 0b0100,
+  AllowDeleteConflict    = 0b1000,
+
+  // Only content conflicts are overwritten.
+  ContentOnly = AllowOverwriteConflict,
+
+  // Overwrite everything with the latest change.
+  Overwrite = AllowOverwriteConflict
+            + AllowCreationConflict
+            + AllowDeleteConflict,
+}
+
 export interface Tree {
   branch(): Promise<Tree>
-  merge(other: Tree): Promise<void>
+  merge(other: Tree, strategy: MergeStrategy): Promise<void>
   exportActions(): Promise<Action[]>
 
   // Read
